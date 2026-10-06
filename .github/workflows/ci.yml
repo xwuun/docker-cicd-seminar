@@ -1,0 +1,57 @@
+name: Seminar CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: seminar
+          POSTGRES_PASSWORD: seminar-local
+          POSTGRES_DB: seminar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U seminar -d seminar"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://seminar:seminar-local@localhost:5432/seminar
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - run: python -m pip install -r requirements.txt
+      - run: python -m pip check
+      - run: python -m pytest -q --cov=main --cov-report=term-missing --cov-fail-under=80
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: seminar-demo:${{ github.sha }}
